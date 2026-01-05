@@ -183,8 +183,8 @@ const AdminDashboard = () => {
                 {course}
               </h3>
               <div className="space-y-1 text-xs text-gray-600">
-                <p>Students: {Math.floor(Math.random() * 100) + 50}</p>
-                <p>Videos: {Math.floor(Math.random() * 50) + 20}</p>
+                <p>Students: {50}</p>
+                <p>Videos: {20}</p>
               </div>
             </div>
           ))}
