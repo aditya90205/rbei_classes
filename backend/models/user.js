@@ -12,7 +12,7 @@ const userSchema = new mongoose.Schema(
       unique: true,
     },
     phoneNumber: {
-      type: Number,
+      type: String,
       required: true,
     },
     password: {
@@ -36,6 +36,11 @@ const userSchema = new mongoose.Schema(
       default: function () {
         return this.role === "admin" ? true : false;
       },
+    },
+    status: {
+      type: String,
+      enum: ["approved", "rejected", "pending"],
+      default: "pending",
     },
   },
   { timestamps: true }

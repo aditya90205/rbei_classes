@@ -1,4 +1,4 @@
-import { User } from "../models/user";
+import { User } from "../models/user.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
@@ -39,6 +39,7 @@ export const createUser = async (req, res) => {
       data: newUser,
     });
   } catch (error) {
+    console.error("Error creating user:", error);
     res
       .status(500)
       .json({ message: "Internal server error, create user", success: false });
@@ -77,7 +78,7 @@ export const loginUser = async (req, res) => {
 
     const token = jwt.sign({ userId: user._id }, process.env.SECRET_KEY);
 
-    user = {
+    const userData = {
       _id: user._id,
       fullname: user.fullname,
       email: user.email,
@@ -95,7 +96,7 @@ export const loginUser = async (req, res) => {
       .json({
         message: "Login successful",
         success: true,
-        user,
+        user: userData,
       });
   } catch (error) {
     res

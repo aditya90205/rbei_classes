@@ -1,6 +1,12 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import toast from "react-hot-toast";
+import { BACKEND_URL } from "../constant";
+import { Eye, EyeOff } from "lucide-react";
 
 const SignupPage = () => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -8,11 +14,12 @@ const SignupPage = () => {
     confirmPassword: "",
     phoneNumber: "",
     dateOfBirth: "",
-    address: "",
     course: "",
   });
   const [errors, setErrors] = useState({});
-  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const validateEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -66,12 +73,6 @@ const SignupPage = () => {
       }
     }
 
-    if (!formData.address) {
-      newErrors.address = "Address is required";
-    } else if (formData.address.length < 5) {
-      newErrors.address = "Address must be at least 5 characters";
-    }
-
     if (!formData.course) {
       newErrors.course = "Please select a course";
     }
@@ -95,25 +96,63 @@ const SignupPage = () => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (validateForm()) {
-      console.log("Signup form submitted:", formData);
-      setSubmitted(true);
-      // Reset form after successful submission
-      setTimeout(() => {
-        setFormData({
-          name: "",
-          email: "",
-          password: "",
-          confirmPassword: "",
-          phoneNumber: "",
-          dateOfBirth: "",
-          address: "",
-          course: "",
-        });
-        setSubmitted(false);
-      }, 2000);
+      setLoading(true);
+      try {
+        const signupData = {
+          fullname: formData.name,
+          email: formData.email,
+          password: formData.password,
+          phoneNumber: formData.phoneNumber,
+          dob: formData.dateOfBirth,
+          course: [formData.course],
+          role: "student",
+        };
+
+        const response = await axios.post(
+          `${BACKEND_URL}/user/signup`,
+          signupData,
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (response.data.success) {
+          toast.success(
+            response.data.message ||
+              "Account created successfully! Please wait for admin approval."
+          );
+
+          setFormData({
+            name: "",
+            email: "",
+            password: "",
+            confirmPassword: "",
+            phoneNumber: "",
+            dateOfBirth: "",
+            course: "",
+          });
+
+          setTimeout(() => {
+            navigate("/");
+          }, 2000);
+        }
+      } catch (error) {
+        console.error("Signup error:", error);
+        if (error.response) {
+          toast.error(error.response.data.message || "Signup failed");
+        } else if (error.request) {
+          toast.error("No response from server. Please try again.");
+        } else {
+          toast.error("An error occurred. Please try again.");
+        }
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -130,12 +169,6 @@ const SignupPage = () => {
             Register your account
           </h2>
         </div>
-
-        {submitted && (
-          <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
-            Account created successfully!
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -192,7 +225,7 @@ const SignupPage = () => {
             </div>
 
             {/* Password Field */}
-            <div>
+            <div className="relative">
               <label
                 htmlFor="password"
                 className="block text-sm font-medium text-gray-700 mb-2"
@@ -200,25 +233,37 @@ const SignupPage = () => {
                 Password
               </label>
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 id="password"
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
-                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                className={`w-full px-4 pr-10 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
                   errors.password
                     ? "border-red-500 focus:ring-red-500"
                     : "border-gray-300 focus:ring-emerald-500"
                 }`}
                 placeholder="Enter your password"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-3 top-9 text-gray-500 hover:text-gray-700"
+              >
+                {showPassword ? (
+                  <EyeOff className="h-5 w-5" />
+                ) : (
+                  <Eye className="h-5 w-5" />
+                )}
+              </button>
               {errors.password && (
                 <p className="text-red-500 text-sm mt-1">{errors.password}</p>
               )}
             </div>
 
             {/* Confirm Password Field */}
-            <div>
+            <div className="relative">
               <label
                 htmlFor="confirmPassword"
                 className="block text-sm font-medium text-gray-700 mb-2"
@@ -226,18 +271,32 @@ const SignupPage = () => {
                 Confirm Password
               </label>
               <input
-                type="password"
+                type={showConfirmPassword ? "text" : "password"}
                 id="confirmPassword"
                 name="confirmPassword"
                 value={formData.confirmPassword}
                 onChange={handleChange}
-                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                className={`w-full px-4 pr-10 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
                   errors.confirmPassword
                     ? "border-red-500 focus:ring-red-500"
                     : "border-gray-300 focus:ring-emerald-500"
                 }`}
                 placeholder="Confirm your password"
               />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                aria-label={
+                  showConfirmPassword ? "Hide password" : "Show password"
+                }
+                className="absolute right-3 top-9 text-gray-500 hover:text-gray-700"
+              >
+                {showConfirmPassword ? (
+                  <EyeOff className="h-5 w-5" />
+                ) : (
+                  <Eye className="h-5 w-5" />
+                )}
+              </button>
               {errors.confirmPassword && (
                 <p className="text-red-500 text-sm mt-1">
                   {errors.confirmPassword}
@@ -332,38 +391,13 @@ const SignupPage = () => {
             </div>
           </div>
 
-          {/* Address Field */}
-          <div>
-            <label
-              htmlFor="address"
-              className="block text-sm font-medium text-gray-700 mb-2"
-            >
-              Address
-            </label>
-            <textarea
-              id="address"
-              name="address"
-              value={formData.address}
-              onChange={handleChange}
-              rows="3"
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-                errors.address
-                  ? "border-red-500 focus:ring-red-500"
-                  : "border-gray-300 focus:ring-emerald-500"
-              }`}
-              placeholder="Enter your address"
-            />
-            {errors.address && (
-              <p className="text-red-500 text-sm mt-1">{errors.address}</p>
-            )}
-          </div>
-
           {/* Submit Button */}
           <button
             type="submit"
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 mt-6"
+            disabled={loading}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Create Account
+            {loading ? "Creating Account..." : "Create Account"}
           </button>
         </form>
 

@@ -1,5 +1,9 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import toast from "react-hot-toast";
+import { BACKEND_URL } from "../constant";
+import { Eye, EyeOff } from "lucide-react";
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -8,7 +12,8 @@ const LoginPage = () => {
     password: "",
   });
   const [errors, setErrors] = useState({});
-  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const validateEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -49,17 +54,46 @@ const LoginPage = () => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (validateForm()) {
-      console.log("Form submitted:", formData);
-      setSubmitted(true);
-      navigate("/dashboard");
-      // Reset form after successful submission
-      setTimeout(() => {
-        setFormData({ email: "", password: "" });
-        setSubmitted(false);
-      }, 2000);
+      setLoading(true);
+      try {
+        const response = await axios.post(
+          `${BACKEND_URL}/user/login`,
+          formData,
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            withCredentials: true,
+          }
+        );
+
+        if (response.data.success) {
+          localStorage.setItem("user", JSON.stringify(response.data.user));
+          toast.success(response.data.message || "Login successful!");
+
+          if (response.data.user.role === "admin") {
+            navigate("/admin/dashboard");
+          } else {
+            navigate("/dashboard");
+          }
+
+          setFormData({ email: "", password: "" });
+        }
+      } catch (error) {
+        console.error("Login error:", error);
+        if (error.response) {
+          toast.error(error.response.data.message || "Login failed");
+        } else if (error.request) {
+          toast.error("No response from server. Please try again.");
+        } else {
+          toast.error("An error occurred. Please try again.");
+        }
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -76,12 +110,6 @@ const LoginPage = () => {
             Login to your account
           </h2>
         </div>
-
-        {submitted && (
-          <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
-            Login successful!
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Email Field */}
@@ -111,7 +139,7 @@ const LoginPage = () => {
           </div>
 
           {/* Password Field */}
-          <div>
+          <div className="relative">
             <label
               htmlFor="password"
               className="block text-sm font-medium text-gray-700 mb-2"
@@ -119,18 +147,30 @@ const LoginPage = () => {
               Password
             </label>
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               id="password"
               name="password"
               value={formData.password}
               onChange={handleChange}
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+              className={`w-full px-4 pr-10 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
                 errors.password
                   ? "border-red-500 focus:ring-red-500"
                   : "border-gray-300 focus:ring-emerald-500"
               }`}
               placeholder="Enter your password"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              className="absolute right-3 top-9 text-gray-500 hover:text-gray-700"
+            >
+              {showPassword ? (
+                <EyeOff className="h-5 w-5" />
+              ) : (
+                <Eye className="h-5 w-5" />
+              )}
+            </button>
             {errors.password && (
               <p className="text-red-500 text-sm mt-1">{errors.password}</p>
             )}
@@ -139,9 +179,10 @@ const LoginPage = () => {
           {/* Submit Button */}
           <button
             type="submit"
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200"
+            disabled={loading}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Login
+            {loading ? "Logging in..." : "Login"}
           </button>
         </form>
 

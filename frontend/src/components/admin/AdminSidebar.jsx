@@ -1,6 +1,9 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { LayoutDashboard, Users, BookOpen, LogOut, Shield } from "lucide-react";
+import axios from "axios";
+import toast from "react-hot-toast";
+import { BACKEND_URL } from "../../constant";
 
 const AdminSidebar = () => {
   const navigate = useNavigate();
@@ -31,8 +34,23 @@ const AdminSidebar = () => {
     navigate(path);
   };
 
-  const handleLogout = () => {
-    navigate("/");
+  const handleLogout = async () => {
+    try {
+      const response = await axios.post(
+        `${BACKEND_URL}/user/logout`,
+        {},
+        { withCredentials: true }
+      );
+
+      if (response.data.success) {
+        localStorage.removeItem("user");
+        toast.success(response.data.message || "Logout successful");
+        navigate("/");
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast.error(error.response?.data?.message || "Logout failed");
+    }
   };
 
   return (
