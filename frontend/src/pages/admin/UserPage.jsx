@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   CheckCircle,
   XCircle,
@@ -9,83 +9,95 @@ import {
   BookOpen,
   Edit,
   UserCheck,
+  Loader,
 } from "lucide-react";
+import axios from "axios";
+import toast from "react-hot-toast";
+import { BACKEND_URL } from "../../constant";
 
 const UserPage = () => {
-  // Sample user data - in real app, this would come from API
-  const [users, setUsers] = useState([
-    {
-      id: 1,
-      name: "John Doe",
-      email: "john.doe@example.com",
-      phone: "+1 234 567 8900",
-      registeredDate: "2025-01-01",
-      status: "pending",
-      requestedCourses: ["CFA Level 1", "FRM Part 1"],
-      assignedCourses: [],
-    },
-    {
-      id: 2,
-      name: "Jane Smith",
-      email: "jane.smith@example.com",
-      phone: "+1 234 567 8901",
-      registeredDate: "2025-01-02",
-      status: "approved",
-      requestedCourses: ["CFA Level 2"],
-      assignedCourses: ["CFA Level 1", "CFA Level 2"],
-    },
-    {
-      id: 3,
-      name: "Mike Johnson",
-      email: "mike.j@example.com",
-      phone: "+1 234 567 8902",
-      registeredDate: "2024-12-28",
-      status: "rejected",
-      requestedCourses: ["FRM Part 2"],
-      assignedCourses: [],
-    },
-    {
-      id: 4,
-      name: "Sarah Williams",
-      email: "sarah.w@example.com",
-      phone: "+1 234 567 8903",
-      registeredDate: "2025-01-02",
-      status: "pending",
-      requestedCourses: ["CFA Level 3", "FRM Part 1"],
-      assignedCourses: [],
-    },
-  ]);
-
+  const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [availableCourses] = useState([
-    "CFA Level 1",
-    "CFA Level 2",
-    "CFA Level 3",
-    "FRM Part 1",
-    "FRM Part 2",
+    "cfa-level-1",
+    "cfa-level-2",
+    "cfa-level-3",
+    "frm-part-1",
+    "frm-part-2",
   ]);
   const [selectedCoursesToAssign, setSelectedCoursesToAssign] = useState([]);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const handleApprove = (userId) => {
-    setUsers(
-      users.map((user) =>
-        user.id === userId ? { ...user, status: "approved" } : user
-      )
-    );
+  // Fetch users from backend
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${BACKEND_URL}/admin/users`, {
+        withCredentials: true,
+      });
+
+      if (response.data.success) {
+        setUsers(response.data.data);
+      }
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      toast.error("Failed to fetch users");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleReject = (userId) => {
-    setUsers(
-      users.map((user) =>
-        user.id === userId ? { ...user, status: "rejected" } : user
-      )
-    );
+  const handleApprove = async (userId) => {
+    try {
+      setActionLoading(true);
+      const response = await axios.patch(
+        `${BACKEND_URL}/admin/${userId}/status`,
+        { status: "approved" },
+        { withCredentials: true }
+      );
+
+      if (response.data.success) {
+        toast.success("User approved successfully");
+        fetchUsers();
+      }
+    } catch (error) {
+      console.error("Error approving user:", error);
+      toast.error(error.response?.data?.message || "Failed to approve user");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReject = async (userId) => {
+    try {
+      setActionLoading(true);
+      const response = await axios.patch(
+        `${BACKEND_URL}/admin/${userId}/status`,
+        { status: "rejected" },
+        { withCredentials: true }
+      );
+
+      if (response.data.success) {
+        toast.success("User rejected successfully");
+        fetchUsers();
+      }
+    } catch (error) {
+      console.error("Error rejecting user:", error);
+      toast.error(error.response?.data?.message || "Failed to reject user");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const openAssignModal = (user) => {
     setSelectedUser(user);
-    setSelectedCoursesToAssign([...user.assignedCourses]);
+    setSelectedCoursesToAssign([...(user.course || [])]);
     setShowModal(true);
   };
 
@@ -97,17 +109,30 @@ const UserPage = () => {
     );
   };
 
-  const saveAssignedCourses = () => {
+  const saveAssignedCourses = async () => {
     if (selectedUser) {
-      setUsers(
-        users.map((user) =>
-          user.id === selectedUser.id
-            ? { ...user, assignedCourses: selectedCoursesToAssign }
-            : user
-        )
-      );
-      setShowModal(false);
-      setSelectedUser(null);
+      try {
+        setActionLoading(true);
+        const response = await axios.patch(
+          `${BACKEND_URL}/admin/${selectedUser._id}/course`,
+          { course: selectedCoursesToAssign },
+          { withCredentials: true }
+        );
+
+        if (response.data.success) {
+          toast.success("Courses assigned successfully");
+          setShowModal(false);
+          setSelectedUser(null);
+          fetchUsers();
+        }
+      } catch (error) {
+        console.error("Error assigning courses:", error);
+        toast.error(
+          error.response?.data?.message || "Failed to assign courses"
+        );
+      } finally {
+        setActionLoading(false);
+      }
     }
   };
 
@@ -134,6 +159,25 @@ const UserPage = () => {
         {status.charAt(0).toUpperCase() + status.slice(1)}
       </span>
     );
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  const formatCourseName = (courseId) => {
+    const courseMap = {
+      "cfa-level-1": "CFA Level 1",
+      "cfa-level-2": "CFA Level 2",
+      "cfa-level-3": "CFA Level 3",
+      "frm-part-1": "FRM Part 1",
+      "frm-part-2": "FRM Part 2",
+    };
+    return courseMap[courseId] || courseId;
   };
 
   const pendingCount = users.filter((u) => u.status === "pending").length;
@@ -191,139 +235,162 @@ const UserPage = () => {
 
       {/* Users Table */}
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold">
-                  User Info
-                </th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">
-                  Contact
-                </th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">
-                  Registered
-                </th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">
-                  Requested Courses
-                </th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">
-                  Assigned Courses
-                </th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">
-                  Status
-                </th>
-                <th className="px-6 py-4 text-center text-sm font-semibold">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {users.map((user) => (
-                <tr
-                  key={user.id}
-                  className="hover:bg-gray-50 transition-colors"
-                >
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold">
-                        {user.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-800">{user.name}</p>
-                        <p className="text-xs text-gray-500">ID: {user.id}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="space-y-1">
-                      <p className="text-sm text-gray-700 flex items-center gap-1">
-                        <Mail className="h-3 w-3 text-gray-400" />
-                        {user.email}
-                      </p>
-                      <p className="text-sm text-gray-700 flex items-center gap-1">
-                        <Phone className="h-3 w-3 text-gray-400" />
-                        {user.phone}
-                      </p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <p className="text-sm text-gray-700 flex items-center gap-1">
-                      <Calendar className="h-4 w-4 text-gray-400" />
-                      {user.registeredDate}
-                    </p>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="space-y-1">
-                      {user.requestedCourses.map((course, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-block bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded mr-1 mb-1"
-                        >
-                          {course}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="space-y-1">
-                      {user.assignedCourses.length > 0 ? (
-                        user.assignedCourses.map((course, idx) => (
-                          <span
-                            key={idx}
-                            className="inline-block bg-green-100 text-green-700 text-xs px-2 py-1 rounded mr-1 mb-1"
-                          >
-                            {course}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-xs text-gray-400">
-                          No courses assigned
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">{getStatusBadge(user.status)}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-center gap-2">
-                      {user.status === "pending" && (
-                        <>
-                          <button
-                            onClick={() => handleApprove(user.id)}
-                            className="p-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg transition"
-                            title="Approve"
-                          >
-                            <CheckCircle className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleReject(user.id)}
-                            className="p-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition"
-                            title="Reject"
-                          >
-                            <XCircle className="h-4 w-4" />
-                          </button>
-                        </>
-                      )}
-                      {user.status === "approved" && (
-                        <button
-                          onClick={() => openAssignModal(user)}
-                          className="p-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg transition flex items-center gap-1 text-xs font-medium"
-                          title="Assign Courses"
-                        >
-                          <Edit className="h-4 w-4" />
-                          Assign
-                        </button>
-                      )}
-                    </div>
-                  </td>
+        {loading ? (
+          <div className="flex items-center justify-center p-12">
+            <Loader className="h-8 w-8 text-indigo-600 animate-spin" />
+            <span className="ml-2 text-gray-600">Loading users...</span>
+          </div>
+        ) : users.length === 0 ? (
+          <div className="p-12 text-center">
+            <p className="text-gray-500">No users found</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+                <tr>
+                  <th className="px-6 py-4 text-left text-sm font-semibold">
+                    User Info
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold">
+                    Contact
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold">
+                    Registered
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold">
+                    Requested Courses
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold">
+                    Assigned Courses
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold">
+                    Status
+                  </th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold">
+                    Actions
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {users.map((user) => (
+                  <tr
+                    key={user._id}
+                    className="hover:bg-gray-50 transition-colors"
+                  >
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold">
+                          {user.fullname
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">
+                            {user.fullname}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            ID: {user._id.slice(-6)}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="space-y-1">
+                        <p className="text-sm text-gray-700 flex items-center gap-1">
+                          <Mail className="h-3 w-3 text-gray-400" />
+                          {user.email}
+                        </p>
+                        <p className="text-sm text-gray-700 flex items-center gap-1">
+                          <Phone className="h-3 w-3 text-gray-400" />
+                          {user.phoneNumber}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-sm text-gray-700 flex items-center gap-1">
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                        {formatDate(user.createdAt)}
+                      </p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="space-y-1">
+                        {user.course && user.course.length > 0 ? (
+                          user.course.map((course, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-block bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded mr-1 mb-1"
+                            >
+                              {formatCourseName(course)}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-gray-400">
+                            No courses requested
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="space-y-1">
+                        {user.course && user.course.length > 0 ? (
+                          user.course.map((course, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-block bg-green-100 text-green-700 text-xs px-2 py-1 rounded mr-1 mb-1"
+                            >
+                              {formatCourseName(course)}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-gray-400">
+                            No courses assigned
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">{getStatusBadge(user.status)}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        {user.status === "pending" && (
+                          <>
+                            <button
+                              onClick={() => handleApprove(user._id)}
+                              disabled={actionLoading}
+                              className="p-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg transition disabled:opacity-50"
+                              title="Approve"
+                            >
+                              <CheckCircle className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleReject(user._id)}
+                              disabled={actionLoading}
+                              className="p-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition disabled:opacity-50"
+                              title="Reject"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
+                        {user.status === "approved" && (
+                          <button
+                            onClick={() => openAssignModal(user)}
+                            className="p-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg transition flex items-center gap-1 text-xs font-medium"
+                            title="Assign Courses"
+                          >
+                            <Edit className="h-4 w-4" />
+                            Assign
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Assign Courses Modal */}
@@ -333,7 +400,7 @@ const UserPage = () => {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                 <BookOpen className="h-6 w-6 text-indigo-600" />
-                Assign Courses to {selectedUser.name}
+                Assign Courses to {selectedUser.fullname}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
@@ -348,14 +415,20 @@ const UserPage = () => {
                 Requested Courses:
               </h3>
               <div className="flex flex-wrap gap-2">
-                {selectedUser.requestedCourses.map((course, idx) => (
-                  <span
-                    key={idx}
-                    className="bg-blue-100 text-blue-700 text-sm px-3 py-1 rounded-full"
-                  >
-                    {course}
+                {selectedUser.course && selectedUser.course.length > 0 ? (
+                  selectedUser.course.map((course, idx) => (
+                    <span
+                      key={idx}
+                      className="bg-blue-100 text-blue-700 text-sm px-3 py-1 rounded-full"
+                    >
+                      {formatCourseName(course)}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-sm text-gray-400">
+                    No courses requested
                   </span>
-                ))}
+                )}
               </div>
             </div>
 
@@ -375,7 +448,9 @@ const UserPage = () => {
                       onChange={() => handleCourseToggle(course)}
                       className="h-5 w-5 text-indigo-600 rounded focus:ring-indigo-500"
                     />
-                    <span className="ml-3 text-gray-700">{course}</span>
+                    <span className="ml-3 text-gray-700">
+                      {formatCourseName(course)}
+                    </span>
                   </label>
                 ))}
               </div>
@@ -384,16 +459,18 @@ const UserPage = () => {
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setShowModal(false)}
-                className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition"
+                disabled={actionLoading}
+                className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={saveAssignedCourses}
-                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition flex items-center gap-2"
+                disabled={actionLoading}
+                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition flex items-center gap-2 disabled:opacity-50"
               >
                 <UserCheck className="h-4 w-4" />
-                Save Assignment
+                {actionLoading ? "Saving..." : "Save Assignment"}
               </button>
             </div>
           </div>
