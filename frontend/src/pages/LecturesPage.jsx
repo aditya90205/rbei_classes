@@ -21,14 +21,53 @@ const LecturesPage = () => {
     return null;
   }
 
-  const currentVideo = selectedChapter.videos[currentVideoIndex];
-  const totalVideos = selectedChapter.videos.length;
-  const completedVideos = selectedChapter.videos.filter(
-    (v) => v.completed
-  ).length;
+  const videos = selectedChapter.videos || [];
+  const currentVideo = videos[currentVideoIndex];
+  const totalVideos = videos.length;
+  const completedVideos = videos.filter((v) => v.completed).length;
   const allCompleted = areAllVideosCompleted();
 
+  if (!totalVideos) {
+    return (
+      <div className="p-8">
+        <div className="mb-8">
+          <button
+            onClick={() => navigate("/course/chapters")}
+            className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 mb-4"
+          >
+            <ArrowLeft className="h-5 w-5" />
+            Back to Chapters
+          </button>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+            {selectedChapter.title}
+          </h1>
+          <p className="text-gray-600">
+            {selectedCourse.title} • {selectedSubject.title}
+          </p>
+        </div>
+
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-6">
+          <p className="font-semibold">
+            No videos are available for this chapter yet.
+          </p>
+          <p className="mt-2 text-sm text-yellow-700">
+            Please check back later or contact your administrator to upload
+            lectures.
+          </p>
+          <button
+            onClick={() => navigate("/course/chapters")}
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Choose another chapter
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const handleVideoComplete = () => {
+    if (!currentVideo) return;
     if (!currentVideo.completed) {
       markVideoCompleted(currentVideo.id);
     }

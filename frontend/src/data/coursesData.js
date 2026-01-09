@@ -1,5 +1,5 @@
 // Complete course structure with all data
-const defaultVideoUrl = "https://www.youtube.com/embed/dQw4w9WgXcQ";
+// NOTE: Videos are now fetched from the backend API, not hardcoded here
 
 const createChapters = (titles, courseKey, subjectKey, startingId = 1) =>
   titles.map((title, idx) => ({
@@ -7,15 +7,7 @@ const createChapters = (titles, courseKey, subjectKey, startingId = 1) =>
     title,
     description: title,
     isLocked: idx !== 0,
-    videos: [
-      {
-        id: `${courseKey}-${subjectKey}-${startingId + idx}-v1`,
-        title: `${title} Overview`,
-        duration: "10:00",
-        url: defaultVideoUrl,
-        completed: false,
-      },
-    ],
+    videos: [], // Videos will be fetched from backend API
     testPassed: false,
   }));
 
@@ -465,6 +457,7 @@ const cfaLevel3PortfolioManagement = [
 export const coursesData = [
   {
     id: 1,
+    key: "cfa-level-1",
     title: "CFA Level 1",
     description: "Chartered Financial Analyst Level 1 certification course",
     thumbnail: "bg-blue-500",
@@ -539,6 +532,7 @@ export const coursesData = [
   },
   {
     id: 2,
+    key: "cfa-level-2",
     title: "CFA Level 2",
     description: "Chartered Financial Analyst Level 2 certification course",
     thumbnail: "bg-purple-500",
@@ -613,6 +607,7 @@ export const coursesData = [
   },
   {
     id: 3,
+    key: "cfa-level-3",
     title: "CFA Level 3",
     description: "Chartered Financial Analyst Level 3 certification course",
     thumbnail: "bg-pink-500",
@@ -679,6 +674,7 @@ export const coursesData = [
   },
   {
     id: 4,
+    key: "frm-part-1",
     title: "FRM Part 1",
     description: "Financial Risk Manager Part 1 certification",
     thumbnail: "bg-orange-500",
@@ -721,6 +717,7 @@ export const coursesData = [
   },
   {
     id: 5,
+    key: "frm-part-2",
     title: "FRM Part 2",
     description: "Financial Risk Manager Part 2 certification",
     thumbnail: "bg-red-500",

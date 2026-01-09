@@ -1,4 +1,5 @@
 import { User } from "../models/user.js";
+import { Video } from "../models/video.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
@@ -102,6 +103,104 @@ export const loginUser = async (req, res) => {
     res
       .status(500)
       .json({ message: "Internal server error, login user", success: false });
+  }
+};
+
+export const getUserAssignedCourse = async (req, res) => {
+  try {
+    const userId = req.id;
+
+    if (!userId) {
+      return res
+        .status(401)
+        .json({ message: "User not authenticated", success: false });
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ message: "User not found", success: false });
+    }
+
+    // If user has no assigned courses
+    if (!user.course || user.course.length === 0) {
+      return res.status(200).json({
+        message: "No courses assigned",
+        success: true,
+        data: [],
+      });
+    }
+
+    // Return user's assigned courses
+    return res.status(200).json({
+      message: "User courses retrieved successfully",
+      success: true,
+      data: user.course,
+    });
+  } catch (error) {
+    console.error("Error getting user assigned courses:", error);
+    res.status(500).json({
+      message: "Internal server error, get user assigned courses",
+      success: false,
+    });
+  }
+};
+
+export const getVideosForChapter = async (req, res) => {
+  try {
+    const { courseId, subjectId, chapterId } = req.params;
+
+    if (!courseId || !subjectId || !chapterId) {
+      return res.status(400).json({
+        message: "courseId, subjectId and chapterId are required",
+        success: false,
+      });
+    }
+
+    const user = await User.findById(req.id);
+
+    if (!user) {
+      return res
+        .status(401)
+        .json({ message: "User not authenticated", success: false });
+    }
+
+    // Students can only access their assigned courses; admins can access all
+    const assignedCourses = (user.course || []).map((c) => String(c));
+    const courseParam = String(courseId);
+    const isAssigned = assignedCourses.some((c) => {
+      const normalized = String(c);
+      // Accept exact match or keys that end with the numeric id (e.g., "cfa-level-1" -> "1")
+      return (
+        normalized === courseParam ||
+        normalized.split("-").pop() === courseParam
+      );
+    });
+
+    if (user.role === "student" && !isAssigned) {
+      return res.status(403).json({
+        message: "You are not assigned to this course",
+        success: false,
+      });
+    }
+
+    const videos = await Video.find({ courseId, subjectId, chapterId }).sort({
+      lectureOrder: 1,
+    });
+
+    return res.status(200).json({
+      message: "Videos retrieved successfully",
+      success: true,
+      data: videos,
+    });
+  } catch (error) {
+    console.error("Error fetching videos for user:", error);
+    return res.status(500).json({
+      message: "Internal server error, get videos for user",
+      success: false,
+    });
   }
 };
 

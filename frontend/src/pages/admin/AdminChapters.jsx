@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -10,6 +10,8 @@ import {
   Plus,
   Eye,
   X,
+  Loader,
+  AlertCircle,
 } from "lucide-react";
 import { coursesData } from "../../data/coursesData";
 
@@ -23,12 +25,74 @@ const AdminChapters = () => {
   const [selectedChapter, setSelectedChapter] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showVideosModal, setShowVideosModal] = useState(false);
+  const [videos, setVideos] = useState({}); // Store videos by chapterId
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [videoData, setVideoData] = useState({
     title: "",
     duration: "",
     url: "",
+    lectureOrder: 1,
   });
   const [videoToDelete, setVideoToDelete] = useState(null);
+
+  const API_URL = "http://localhost:3000/api/v1/admin"; // Adjust based on your backend URL
+
+  useEffect(() => {
+    const preloadVideos = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        await Promise.all(
+          (subject?.chapters || []).map((chapter) =>
+            fetchVideos(chapter.id, { withLoader: false })
+          )
+        );
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (subject) {
+      preloadVideos();
+    }
+  }, [subject]);
+
+  // Fetch videos for a specific chapter
+  const fetchVideos = async (chapterId, { withLoader = true } = {}) => {
+    try {
+      if (withLoader) setLoading(true);
+      setError(null);
+      const response = await fetch(
+        `${API_URL}/videos/${courseId}/${subjectId}/${chapterId}`,
+        {
+          credentials: "include",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch videos");
+      }
+
+      const data = await response.json();
+      setVideos((prev) => ({
+        ...prev,
+        [chapterId]: data.data || [],
+      }));
+    } catch (err) {
+      setError(err.message);
+      console.error("Error fetching videos:", err);
+    } finally {
+      if (withLoader) setLoading(false);
+    }
+  };
+
+  // Get videos for a chapter (from state or fetch)
+  const getChapterVideos = (chapterId) => {
+    return videos[chapterId] || [];
+  };
 
   if (!course || !subject) {
     navigate("/admin/courses");
@@ -38,31 +102,112 @@ const AdminChapters = () => {
   const handleUploadVideo = (chapter) => {
     setSelectedChapter(chapter);
     setShowUploadModal(true);
-    setVideoData({ title: "", duration: "", url: "" });
+    const currentVideos = getChapterVideos(chapter.id);
+    setVideoData({
+      title: "",
+      duration: "",
+      url: "",
+      lectureOrder: currentVideos.length + 1,
+    });
   };
 
-  const handleViewVideos = (chapter) => {
+  const handleViewVideos = async (chapter) => {
     setSelectedChapter(chapter);
+    await fetchVideos(chapter.id);
     setShowVideosModal(true);
   };
 
-  const handleSaveVideo = () => {
-    // In real app, this would make an API call to save the video
-    console.log("Uploading video:", {
-      chapterId: selectedChapter.id,
-      ...videoData,
-    });
-    alert(`Video "${videoData.title}" uploaded successfully!`);
-    setShowUploadModal(false);
-    setVideoData({ title: "", duration: "", url: "" });
+  const handleSaveVideo = async () => {
+    if (!videoData.title || !videoData.duration || !videoData.url) {
+      setError("All fields are required");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`${API_URL}/videos`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          videoTitle: videoData.title,
+          videoDuration: videoData.duration,
+          videoUrl: videoData.url,
+          courseId: courseId,
+          subjectId: subjectId,
+          chapterId: selectedChapter.id.toString(),
+          lectureOrder: parseInt(videoData.lectureOrder),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to upload video");
+      }
+
+      const data = await response.json();
+
+      // Update local videos state
+      setVideos((prev) => ({
+        ...prev,
+        [selectedChapter.id]: [...(prev[selectedChapter.id] || []), data.data],
+      }));
+
+      setShowUploadModal(false);
+      setVideoData({
+        title: "",
+        duration: "",
+        url: "",
+        lectureOrder: 1,
+      });
+      alert("Video uploaded successfully!");
+    } catch (err) {
+      setError(err.message);
+      console.error("Error uploading video:", err);
+      alert(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDeleteVideo = (videoId) => {
-    // In real app, this would make an API call to delete the video
-    if (window.confirm("Are you sure you want to delete this video?")) {
-      console.log("Deleting video:", videoId);
+  const handleDeleteVideo = async (videoId) => {
+    if (!window.confirm("Are you sure you want to delete this video?")) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`${API_URL}/videos/${videoId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to delete video");
+      }
+
+      // Update local videos state
+      setVideos((prev) => ({
+        ...prev,
+        [selectedChapter.id]: prev[selectedChapter.id].filter(
+          (v) => v._id !== videoId
+        ),
+      }));
+
       alert("Video deleted successfully!");
-      // Here you would update the state/refetch data
+    } catch (err) {
+      setError(err.message);
+      console.error("Error deleting video:", err);
+      alert(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -108,7 +253,10 @@ const AdminChapters = () => {
               Total Videos
             </p>
             <p className="text-2xl font-bold text-gray-800">
-              {subject.chapters.reduce((sum, ch) => sum + ch.videos.length, 0)}
+              {subject.chapters.reduce(
+                (sum, ch) => sum + getChapterVideos(ch.id).length,
+                0
+              )}
             </p>
           </div>
         </div>
@@ -151,7 +299,7 @@ const AdminChapters = () => {
                       <PlayCircle className="h-4 w-4 text-indigo-500" />
                       <span>
                         <span className="font-semibold text-gray-800">
-                          {chapter.videos.length}
+                          {getChapterVideos(chapter.id).length}
                         </span>{" "}
                         video(s) uploaded
                       </span>
@@ -161,13 +309,13 @@ const AdminChapters = () => {
 
                 {/* Action Buttons */}
                 <div className="flex items-center gap-2">
-                  {chapter.videos.length > 0 && (
+                  {getChapterVideos(chapter.id).length > 0 && (
                     <button
                       onClick={() => handleViewVideos(chapter)}
                       className="flex items-center gap-2 bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg transition text-sm font-medium"
                     >
                       <Eye className="h-4 w-4" />
-                      View Videos ({chapter.videos.length})
+                      View Videos ({getChapterVideos(chapter.id).length})
                     </button>
                   )}
                   <button
@@ -200,6 +348,15 @@ const AdminChapters = () => {
                 ×
               </button>
             </div>
+
+            {error && (
+              <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-red-800">{error}</p>
+                </div>
+              </div>
+            )}
 
             <div className="mb-6">
               <p className="text-sm text-gray-600 mb-4">
@@ -242,6 +399,25 @@ const AdminChapters = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Lecture Order
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={videoData.lectureOrder}
+                    onChange={(e) =>
+                      setVideoData({
+                        ...videoData,
+                        lectureOrder: parseInt(e.target.value) || 1,
+                      })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Order of lecture in chapter"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Video URL (YouTube Embed or Direct Link)
                   </label>
                   <input
@@ -272,6 +448,7 @@ const AdminChapters = () => {
               <button
                 onClick={() => setShowUploadModal(false)}
                 className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition"
+                disabled={loading}
               >
                 Cancel
               </button>
@@ -279,11 +456,23 @@ const AdminChapters = () => {
                 onClick={handleSaveVideo}
                 className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition flex items-center gap-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
                 disabled={
-                  !videoData.title || !videoData.duration || !videoData.url
+                  !videoData.title ||
+                  !videoData.duration ||
+                  !videoData.url ||
+                  loading
                 }
               >
-                <Upload className="h-4 w-4" />
-                Upload Video
+                {loading ? (
+                  <>
+                    <Loader className="h-4 w-4 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Upload Video
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -307,6 +496,15 @@ const AdminChapters = () => {
               </button>
             </div>
 
+            {error && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-red-800">{error}</p>
+                </div>
+              </div>
+            )}
+
             <div className="mb-4 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -314,7 +512,7 @@ const AdminChapters = () => {
                     Total Videos
                   </p>
                   <p className="text-2xl font-bold text-gray-800">
-                    {selectedChapter.videos.length}
+                    {getChapterVideos(selectedChapter.id).length}
                   </p>
                 </div>
                 <button
@@ -332,62 +530,78 @@ const AdminChapters = () => {
 
             {/* Videos List - Scrollable */}
             <div className="flex-1 overflow-y-auto">
-              {selectedChapter.videos.length > 0 ? (
+              {loading && getChapterVideos(selectedChapter.id).length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <Loader className="h-8 w-8 animate-spin text-indigo-600 mx-auto mb-2" />
+                    <p className="text-gray-600">Loading videos...</p>
+                  </div>
+                </div>
+              ) : getChapterVideos(selectedChapter.id).length > 0 ? (
                 <div className="space-y-3">
-                  {selectedChapter.videos.map((video, idx) => (
-                    <div
-                      key={video.id}
-                      className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition border border-gray-200"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3 flex-1">
-                          <div className="h-10 w-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0">
-                            {idx + 1}
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="text-sm font-bold text-gray-800 mb-1">
-                              {video.title}
-                            </h4>
-                            <div className="flex items-center gap-4 text-xs text-gray-600">
-                              <span className="flex items-center gap-1">
-                                <PlayCircle className="h-3 w-3" />
-                                Duration: {video.duration}
-                              </span>
+                  {getChapterVideos(selectedChapter.id)
+                    .sort((a, b) => a.lectureOrder - b.lectureOrder)
+                    .map((video, idx) => (
+                      <div
+                        key={video._id}
+                        className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition border border-gray-200"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3 flex-1">
+                            <div className="h-10 w-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0">
+                              {video.lectureOrder}
                             </div>
-                            <div className="mt-2">
-                              <a
-                                href={video.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-blue-600 hover:underline"
-                              >
-                                {video.url}
-                              </a>
+                            <div className="flex-1">
+                              <h4 className="text-sm font-bold text-gray-800 mb-1">
+                                {video.videoTitle}
+                              </h4>
+                              <div className="flex items-center gap-4 text-xs text-gray-600">
+                                <span className="flex items-center gap-1">
+                                  <PlayCircle className="h-3 w-3" />
+                                  Duration: {video.videoDuration}
+                                </span>
+                              </div>
+                              <div className="mt-2">
+                                <a
+                                  href={video.videoUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 hover:underline"
+                                >
+                                  {video.videoUrl}
+                                </a>
+                              </div>
+                              {video.uploadedBy && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Uploaded by: {video.uploadedBy.fullname}
+                                </p>
+                              )}
                             </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2 ml-4">
-                          <button
-                            onClick={() => {
-                              // Edit functionality
-                              console.log("Edit video:", video.id);
-                            }}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                            title="Edit Video"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteVideo(video.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                            title="Delete Video"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center gap-2 ml-4">
+                            <button
+                              onClick={() => {
+                                // Edit functionality
+                                console.log("Edit video:", video._id);
+                              }}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                              title="Edit Video"
+                              disabled={loading}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteVideo(video._id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Delete Video"
+                              disabled={loading}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               ) : (
                 <div className="text-center py-12">

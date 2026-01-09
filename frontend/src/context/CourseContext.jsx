@@ -1,6 +1,8 @@
 import React, { createContext, useState, useContext, useCallback } from "react";
 import { coursesData, testQuestionsData } from "../data/coursesData";
 
+const API_BASE = "http://localhost:3000/api/v1"; // Backend base URL
+
 // Create the context
 const CourseContext = createContext();
 
@@ -26,6 +28,41 @@ export const CourseProvider = ({ children }) => {
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [userProgress, setUserProgress] = useState({});
 
+  const mapVideosFromApi = useCallback((videosFromApi) => {
+    return (videosFromApi || []).map((video) => ({
+      id: video._id,
+      title: video.videoTitle,
+      duration: video.videoDuration,
+      url: video.videoUrl,
+      lectureOrder: video.lectureOrder,
+      completed: false,
+    }));
+  }, []);
+
+  const fetchVideosForChapter = useCallback(
+    async (courseId, subjectId, chapterId) => {
+      try {
+        const response = await fetch(
+          `${API_BASE}/user/videos/${courseId}/${subjectId}/${chapterId}`,
+          {
+            credentials: "include",
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch chapter videos");
+        }
+
+        const data = await response.json();
+        return mapVideosFromApi(data.data);
+      } catch (error) {
+        console.error("Error fetching chapter videos:", error);
+        return [];
+      }
+    },
+    [mapVideosFromApi]
+  );
+
   // Select a course
   const selectCourse = useCallback(
     (courseId) => {
@@ -48,34 +85,101 @@ export const CourseProvider = ({ children }) => {
     [selectedCourse]
   );
 
-  // Select a chapter
+  // Select a chapter and hydrate it with videos from the backend
   const selectChapter = useCallback(
-    (chapterId) => {
-      if (!selectedSubject) return;
-      const chapter = selectedSubject.chapters.find((c) => c.id === chapterId);
-      setSelectedChapter(chapter);
+    async (chapterId) => {
+      if (!selectedSubject || !selectedCourse) return;
+
+      const videos = await fetchVideosForChapter(
+        selectedCourse.id,
+        selectedSubject.id,
+        chapterId
+      );
+
+      let nextSelectedCourse = null;
+      let nextSelectedSubject = null;
+      let nextSelectedChapter = null;
+
+      setCourses((prevCourses) => {
+        const updatedCourses = prevCourses.map((course) => {
+          if (course.id !== selectedCourse.id) return course;
+
+          const updatedSubjects = course.subjects.map((subject) => {
+            if (subject.id !== selectedSubject.id) return subject;
+
+            const updatedChapters = subject.chapters.map((chapter) =>
+              chapter.id === chapterId ? { ...chapter, videos } : chapter
+            );
+
+            return { ...subject, chapters: updatedChapters };
+          });
+
+          return { ...course, subjects: updatedSubjects };
+        });
+
+        nextSelectedCourse = updatedCourses.find(
+          (c) => c.id === selectedCourse.id
+        );
+        nextSelectedSubject = nextSelectedCourse?.subjects.find(
+          (s) => s.id === selectedSubject.id
+        );
+        nextSelectedChapter = nextSelectedSubject?.chapters.find(
+          (c) => c.id === chapterId
+        );
+
+        return updatedCourses;
+      });
+
+      if (nextSelectedCourse) setSelectedCourse(nextSelectedCourse);
+      if (nextSelectedSubject) setSelectedSubject(nextSelectedSubject);
+      if (nextSelectedChapter) setSelectedChapter(nextSelectedChapter);
       setCurrentVideoIndex(0);
     },
-    [selectedSubject]
+    [fetchVideosForChapter, selectedCourse, selectedSubject]
   );
 
   // Mark video as completed
-  const markVideoCompleted = useCallback((videoId) => {
-    setCourses((prevCourses) =>
-      prevCourses.map((course) => ({
-        ...course,
-        subjects: course.subjects.map((subject) => ({
-          ...subject,
-          chapters: subject.chapters.map((chapter) => ({
-            ...chapter,
-            videos: chapter.videos.map((video) =>
-              video.id === videoId ? { ...video, completed: true } : video
-            ),
+  const markVideoCompleted = useCallback(
+    (videoId) => {
+      let nextSelectedCourse = null;
+      let nextSelectedSubject = null;
+      let nextSelectedChapter = null;
+
+      setCourses((prevCourses) => {
+        const updatedCourses = prevCourses.map((course) => ({
+          ...course,
+          subjects: course.subjects.map((subject) => ({
+            ...subject,
+            chapters: subject.chapters.map((chapter) => ({
+              ...chapter,
+              videos: chapter.videos.map((video) =>
+                video.id === videoId ? { ...video, completed: true } : video
+              ),
+            })),
           })),
-        })),
-      }))
-    );
-  }, []);
+        }));
+
+        if (selectedCourse) {
+          nextSelectedCourse = updatedCourses.find(
+            (c) => c.id === selectedCourse.id
+          );
+          nextSelectedSubject = nextSelectedCourse?.subjects.find(
+            (s) => selectedSubject && s.id === selectedSubject.id
+          );
+          nextSelectedChapter = nextSelectedSubject?.chapters.find(
+            (c) => selectedChapter && c.id === selectedChapter.id
+          );
+        }
+
+        return updatedCourses;
+      });
+
+      if (nextSelectedCourse) setSelectedCourse(nextSelectedCourse);
+      if (nextSelectedSubject) setSelectedSubject(nextSelectedSubject);
+      if (nextSelectedChapter) setSelectedChapter(nextSelectedChapter);
+    },
+    [selectedChapter, selectedCourse, selectedSubject]
+  );
 
   // Check if all videos in chapter are completed
   const areAllVideosCompleted = useCallback(() => {

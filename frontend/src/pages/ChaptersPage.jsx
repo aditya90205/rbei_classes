@@ -18,14 +18,14 @@ const ChaptersPage = () => {
     return null;
   }
 
-  const handleChapterSelect = (chapter) => {
+  const handleChapterSelect = async (chapter) => {
     if (chapter.isLocked) {
       alert(
         "This chapter is locked. Please complete the previous chapter test first."
       );
       return;
     }
-    selectChapter(chapter.id);
+    await selectChapter(chapter.id);
     navigate("/course/lectures");
   };
 
